@@ -217,7 +217,7 @@ impl<'s, R: DeserializeOwned + Serialize + Debug> SerdeWal<R> {
         self.wal.path()
     }
 
-    /// First index that is still available in phisical WAL.
+    /// First index that is still available in physical WAL.
     pub fn first_physical_index(&self) -> u64 {
         self.wal.first_index()
     }
