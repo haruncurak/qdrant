@@ -34,7 +34,6 @@ pub(super) async fn _transfer_wal_delta(
     remote_shard: RemoteShard,
     channel_service: ChannelService,
     consensus: &dyn ShardTransferConsensus,
-    collection_name: &str,
 ) -> CollectionResult<()> {
     let remote_peer_id = remote_shard.peer_id;
 
@@ -53,10 +52,12 @@ pub(super) async fn _transfer_wal_delta(
         )));
     };
 
+    let from_version = 0;
+
     // Queue proxy local shard
     // TODO: we likely want a different proxy type here
     replica_set
-        .queue_proxify_local(remote_shard.clone())
+        .queue_proxify_local(remote_shard.clone(), Some(from_version))
         .await?;
 
     debug_assert!(
@@ -64,26 +65,9 @@ pub(super) async fn _transfer_wal_delta(
         "Local shard must be a queue proxy",
     );
 
-    // TODO: start transferring WAL to remote,
-
-    // Set shard state to Partial
-    log::trace!("Shard {shard_id} diff recovered on {remote_peer_id} for diff transfer, switching into next stage through consensus");
-    consensus
-        .snapshot_recovered_switch_to_partial_confirm_remote(
-            &transfer_config,
-            collection_name,
-            &remote_shard,
-        )
-        .await
-        .map_err(|err| {
-            CollectionError::service_error(format!(
-                "Can't switch shard {shard_id} to Partial state after diff transfer: {err}"
-            ))
-        })?;
-
     // Transfer queued updates to remote, transform into forward proxy
-    // TODO: instead, clean up our custom proxy here and transfer WAL updates
-    log::trace!("Transfer all queue proxy updates and transform into forward proxy");
+    // This way we send a complete WAL diff
+    log::trace!("Transfer WAL diff by transferring all queue proxy updates and transform into forward proxy");
     replica_set.queue_proxy_into_forward_proxy().await?;
 
     // Wait for Partial state in our replica set

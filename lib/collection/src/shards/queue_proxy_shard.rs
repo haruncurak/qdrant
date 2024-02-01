@@ -15,8 +15,8 @@ use super::transfer::driver::MAX_RETRY_COUNT;
 use super::update_tracker::UpdateTracker;
 use crate::operations::point_ops::WriteOrdering;
 use crate::operations::types::{
-    CollectionInfo, CollectionResult, CoreSearchRequestBatch, CountRequestInternal, CountResult,
-    PointRequestInternal, Record, UpdateResult,
+    CollectionError, CollectionInfo, CollectionResult, CoreSearchRequestBatch,
+    CountRequestInternal, CountResult, PointRequestInternal, Record, UpdateResult,
 };
 use crate::operations::OperationWithClockTag;
 use crate::shards::local_shard::LocalShard;
@@ -51,6 +51,9 @@ pub struct QueueProxyShard {
 }
 
 impl QueueProxyShard {
+    /// Queue proxy the given local shard and point to the remote shard.
+    ///
+    /// This starts queueing all new updates on the local shard at the point of creation.
     pub fn new(
         wrapped_shard: LocalShard,
         remote_shard: RemoteShard,
@@ -59,6 +62,42 @@ impl QueueProxyShard {
         Self {
             inner: Some(Inner::new(wrapped_shard, remote_shard, max_ack_version)),
         }
+    }
+
+    /// Queue proxy the given local shard and point to the remote shard, from a specific WAL version.
+    ///
+    /// This queues all (existing) updates from a specific WAL `version` and onwards. In other
+    /// words, this will ensure we transfer updates we already have and all new updates from a
+    /// specific point in our WAL.
+    ///
+    /// # Errors
+    ///
+    /// This fails if the given `version` is not in bounds of our current WAL. If the given
+    /// `version` is to old or to new, queue proxy creation is rejected.
+    pub fn new_from_version(
+        wrapped_shard: LocalShard,
+        remote_shard: RemoteShard,
+        max_ack_version: Arc<AtomicU64>,
+        version: u64,
+    ) -> Result<Self, (LocalShard, CollectionError)> {
+        // Lock WAL until we've successfully created the queue proxy shard
+        let wal = wrapped_shard.wal.clone();
+        let wal_lock = wal.lock();
+
+        // If start version is not in current WAL bounds, we cannot reliably transfer WAL
+        let (first_idx, last_idx) = (wal_lock.first_index(), wal_lock.last_index());
+        if version < first_idx || version > last_idx {
+            return Err((wrapped_shard, CollectionError::service_error(format!("Cannot create queue proxy shard from version {version} because it is out of WAL bounds ({first_idx}..={last_idx})"))));
+        }
+
+        Ok(Self {
+            inner: Some(Inner::new_from_version(
+                wrapped_shard,
+                remote_shard,
+                max_ack_version,
+                version,
+            )),
+        })
     }
 
     pub async fn create_snapshot(
@@ -282,6 +321,27 @@ impl Inner {
 
         // Set max acknowledged version for WAL to not truncate parts we still need to transfer later
         shard.set_max_ack_version(Some(last_idx));
+
+        shard
+    }
+
+    pub fn new_from_version(
+        wrapped_shard: LocalShard,
+        remote_shard: RemoteShard,
+        max_ack_version: Arc<AtomicU64>,
+        version: u64,
+    ) -> Self {
+        let shard = Self {
+            wrapped_shard,
+            remote_shard,
+            last_update_idx: version.into(),
+            update_lock: Default::default(),
+            max_ack_version,
+        };
+
+        // Set max acknowledged version for WAL to not truncate parts we still need to transfer later
+        // TODO: there may be an off by 1 error with version!
+        shard.set_max_ack_version(Some(version - 1));
 
         shard
     }
