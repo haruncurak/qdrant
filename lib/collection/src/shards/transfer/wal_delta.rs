@@ -41,8 +41,6 @@ pub(super) async fn _transfer_wal_delta(
 
     // TODO: ask remote for recovery point
 
-    // TODO: find recovery point in local WAL
-
     let shard_holder_read = shard_holder.read().await;
 
     let transferring_shard = shard_holder_read.get_shard(&shard_id);
@@ -52,10 +50,13 @@ pub(super) async fn _transfer_wal_delta(
         )));
     };
 
+    // TODO: resolve diff point, define proper version here!
     let from_version = 0;
 
+    // TODO: send our last seen clock map to remote, set it as truncation point
+
     // Queue proxy local shard
-    // TODO: we likely want a different proxy type here
+    // TODO: we might want a different proxy type here
     replica_set
         .queue_proxify_local(remote_shard.clone(), Some(from_version))
         .await?;
