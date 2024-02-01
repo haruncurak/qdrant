@@ -217,10 +217,18 @@ impl<'s, R: DeserializeOwned + Serialize + Debug> SerdeWal<R> {
         self.wal.path()
     }
 
-    pub fn first_index(&self) -> u64 {
-        self.first_index.unwrap_or_else(|| self.wal.first_index())
+    /// First index that is still available in phisical WAL.
+    pub fn first_physical_index(&self) -> u64 {
+        self.wal.first_index()
     }
 
+    /// First index that is still available in logical WAL.
+    pub fn first_index(&self) -> u64 {
+        self.first_index
+            .unwrap_or_else(|| self.first_physical_index())
+    }
+
+    /// Last index that is still available in logical WAL.
     pub fn last_index(&self) -> u64 {
         self.wal.last_index()
     }
