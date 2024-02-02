@@ -1323,6 +1323,29 @@ impl From<Vec<IntPayloadType>> for MatchExcept {
     }
 }
 
+#[derive(Debug, Deserialize, Serialize, JsonSchema, Clone, PartialEq)]
+#[serde(untagged)]
+pub enum RangeInterface {
+    Float(Range<FloatPayloadType>),
+    DateTime(Range<DateTimePayloadType>),
+}
+
+impl RangeInterface {
+    pub fn to_float_range(self) -> Option<Range<FloatPayloadType>> {
+        match self {
+            RangeInterface::Float(range) => Some(range),
+            _ => None,
+        }
+    }
+
+    pub fn to_datetime_range(self) -> Option<Range<DateTimePayloadType>> {
+        match self {
+            RangeInterface::DateTime(range) => Some(range),
+            _ => None,
+        }
+    }
+}
+
 /// Range filter request
 #[macro_rules_attribute::macro_rules_derive(crate::common::macros::schemars_rename_generics)]
 #[derive_args(<FloatPayloadType> => "Range", <DateTimePayloadType> => "DatetimeRange")]
@@ -1559,7 +1582,7 @@ pub struct FieldCondition {
     /// Check if point has field with a given value
     pub r#match: Option<Match>,
     /// Check if points value lies in a given range
-    pub range: Option<Range<FloatPayloadType>>,
+    pub range: Option<RangeInterface>,
     /// Check if datetime is within a given range
     pub datetime_range: Option<Range<DateTimePayloadType>>,
     /// Check if points geo location lies in a given area
@@ -1590,7 +1613,7 @@ impl FieldCondition {
         Self {
             key: key.into(),
             r#match: None,
-            range: Some(range),
+            range: Some(RangeInterface::Float(range)),
             datetime_range: None,
             geo_bounding_box: None,
             geo_radius: None,

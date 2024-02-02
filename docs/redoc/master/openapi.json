@@ -6448,7 +6448,7 @@
             "description": "Check if points value lies in a given range",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Range"
+                "$ref": "#/components/schemas/RangeInterface"
               },
               {
                 "nullable": true
@@ -6607,6 +6607,16 @@
             "$ref": "#/components/schemas/AnyVariants"
           }
         }
+      },
+      "RangeInterface": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Range"
+          },
+          {
+            "$ref": "#/components/schemas/DatetimeRange"
+          }
+        ]
       },
       "Range": {
         "description": "Range filter request",
